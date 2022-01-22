@@ -26,7 +26,7 @@ func main() {
 	// Incorporate feedback and find next best guess
 	for {
 		feedbackPerDigit := readFeedbackForDigits(getDigits(bestGuess, 5))
-		if all(feedbackPerDigit, func(f Feedback) bool { return f.feedbackType == feedbackTypeCorrectPosition }) {
+		if all(feedbackPerDigit, func(f feedback) bool { return f.feedbackType == feedbackTypeCorrect }) {
 			fmt.Printf("We found the correct number (\033[32m\033[1m%v\033[0m)! 🎉\n", bestGuess)
 			break
 		}
@@ -55,15 +55,16 @@ func findBestGuess(candidates []uint, digitFrequencyPerPosition []map[uint]uint)
 	return bestGuess
 }
 
-func incorporateFeedback(feedbackPerDigit []Feedback, candidates []uint) (newCandidates []uint) {
+
+func incorporateFeedback(feedbackPerDigit []feedback, candidates []uint) (newCandidates []uint) {
 	newCandidates = make([]uint, len(candidates))
 	copy(newCandidates, candidates)
-	var newCorrectPositions []uint
+	var correctPositions []uint
 
 	// Process correct feedbacks first as they affect the other feedbacks
 	for i := 0; i < len(feedbackPerDigit); i++ {
-		if feedbackPerDigit[i].feedbackType == feedbackTypeCorrectPosition {
-			newCorrectPositions = append(newCorrectPositions, uint(i))
+		if feedbackPerDigit[i].feedbackType == feedbackTypeCorrect {
+			correctPositions = append(correctPositions, uint(i))
 			newCandidates = filter(newCandidates, func(candidate uint) bool {
 				return getDigits(candidate, 5)[i] == feedbackPerDigit[i].digit
 			})
@@ -72,13 +73,13 @@ func incorporateFeedback(feedbackPerDigit []Feedback, candidates []uint) (newCan
 
 	for i := 0; i < len(feedbackPerDigit); i++ {
 		switch feedbackPerDigit[i].feedbackType {
-		case feedbackTypeCorrectPosition:
+		case feedbackTypeCorrect:
 			// Already processed
 			// Do nothing
 		case feedbackTypePresent:
 			newCandidates = filter(newCandidates, func(candidate uint) bool {
 				for index, digit := range getDigits(candidate, 5) {
-					if digit == feedbackPerDigit[i].digit && index != i && !contains(newCorrectPositions, uint(index)) {
+					if digit == feedbackPerDigit[i].digit && index != i && !contains(correctPositions, uint(index)) {
 						return true
 					}
 				}
@@ -87,7 +88,7 @@ func incorporateFeedback(feedbackPerDigit []Feedback, candidates []uint) (newCan
 		case feedbackTypeAbsent:
 			newCandidates = filter(newCandidates, func(candidate uint) bool {
 				for index, digit := range getDigits(candidate, 5) {
-					if digit == feedbackPerDigit[i].digit && !contains(newCorrectPositions, uint(index)) {
+					if digit == feedbackPerDigit[i].digit && !contains(correctPositions, uint(index)) {
 						return false
 					}
 				}
@@ -175,21 +176,21 @@ func getDigits(num uint, numberOfDigits uint) []uint {
 	return result
 }
 
-type Feedback struct {
+type feedback struct {
 	digit        uint
-	feedbackType FeedbackType
+	feedbackType feedbackType
 }
 
-type FeedbackType uint
+type feedbackType uint
 
 const (
-	feedbackTypeAbsent FeedbackType = iota
+	feedbackTypeAbsent feedbackType = iota
 	feedbackTypePresent
-	feedbackTypeCorrectPosition
+	feedbackTypeCorrect
 )
 
-func readFeedbackForDigits(guessDigits []uint) []Feedback {
-	result := make([]Feedback, len(guessDigits))
+func readFeedbackForDigits(guessDigits []uint) []feedback {
+	result := make([]feedback, len(guessDigits))
 	reader := bufio.NewReader(os.Stdin)
 	for i := len(guessDigits) - 1; i >= 0; i-- {
 		fmt.Printf("Was the digit in position \033[1m%v\033[0m of the guess (", len(guessDigits)-i)
@@ -207,11 +208,11 @@ func readFeedbackForDigits(guessDigits []uint) []Feedback {
 			text = strings.TrimSuffix(text, "\n")
 			switch text {
 			case "c":
-				result[i] = Feedback{guessDigits[i], feedbackTypeCorrectPosition}
+				result[i] = feedback{guessDigits[i], feedbackTypeCorrect}
 			case "p":
-				result[i] = Feedback{guessDigits[i], feedbackTypePresent}
+				result[i] = feedback{guessDigits[i], feedbackTypePresent}
 			case "a":
-				result[i] = Feedback{guessDigits[i], feedbackTypeAbsent}
+				result[i] = feedback{guessDigits[i], feedbackTypeAbsent}
 			default:
 				fmt.Fprintf(os.Stderr, "Invalid feedback: %s\n", text)
 				continue
@@ -241,7 +242,7 @@ func contains(slice []uint, elem uint) bool {
 	return false
 }
 
-func all(slice []Feedback, predicate func(Feedback) bool) bool {
+func all(slice []feedback, predicate func(feedback) bool) bool {
 	for i := 0; i < len(slice); i++ {
 		if !predicate(slice[i]) {
 			return false
