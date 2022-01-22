@@ -10,8 +10,8 @@ import (
 // Interactive helper to find a solution to the game "Primel" (https://converged.yt/primel/)
 // The helper uses the simple heuristics of finding the most restrictive digit for each position
 // It is not optimal! A better helper would find the most restrictive guess considering all
-// remaining candidates, or even the best guess considering all possible outcomes for each
-// candidate.
+// remaining candidates. The optimal solver would find the best guess considering all possible
+// outcomes for each candidate.
 func main() {
 	// Calculate set of possible values
 	candidates := getPrimes(10000, 100000)
