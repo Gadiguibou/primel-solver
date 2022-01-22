@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
 )
 
 // Interactive helper to find a solution to the game "Primel" (https://converged.yt/primel/)
@@ -16,11 +18,8 @@ func main() {
 	// Calculate set of possible values
 	candidates := getPrimes(10000, 100000)
 
-	// Calculate the frequency of each digit per position
-	digitFrequencyPerPosition := findDigitFrequencyPerPosition(candidates, 5)
-
 	// Find best guess according to the frequency of each digit per position
-	bestGuess := findBestGuess(candidates, digitFrequencyPerPosition)
+	bestGuess := findBestGuess(candidates)
 	fmt.Printf("The best first guess is: %05d. The number of remaining candidates is %v\n", bestGuess, len(candidates))
 
 	// Incorporate feedback and find next best guess
@@ -31,30 +30,90 @@ func main() {
 			break
 		}
 		candidates = incorporateFeedback(feedbackPerDigit, candidates)
-		digitFrequencyPerPosition = findDigitFrequencyPerPosition(candidates, 5)
 		if len(candidates) == 0 {
 			fmt.Fprintf(os.Stderr, "No more candidates found!")
 			os.Exit(1)
 		}
-		bestGuess = findBestGuess(candidates, digitFrequencyPerPosition)
+		bestGuess = findBestGuess(candidates)
 		fmt.Printf("The new best guess is: %05d. The number of remaining candidates is %v\n", bestGuess, len(candidates))
 	}
 }
 
-func findBestGuess(candidates []uint, digitFrequencyPerPosition []map[uint]uint) uint {
-	bestGuess := candidates[0]
-	bestGuessValue := evaluateGuess(bestGuess, digitFrequencyPerPosition)
-	for i := 1; i < len(candidates); i++ {
-		guess := candidates[i]
-		guessValue := evaluateGuess(guess, digitFrequencyPerPosition)
-		if guessValue > bestGuessValue {
-			bestGuess = guess
-			bestGuessValue = guessValue
-		}
+func findBestGuess(candidates []uint) uint {
+	var bestGuess uint
+	var bestGuessValue uint64
+	var bestGuessMutex sync.Mutex
+	var wg sync.WaitGroup
+	for i := 0; i < len(candidates); i++ {
+		candidateGuess := candidates[i]
+		wg.Add(1)
+		go func(bestGuessMutex *sync.Mutex) {
+			defer wg.Done()
+			guessValue := evaluateGuess(candidateGuess, candidates)
+			bestGuessMutex.Lock()
+			if guessValue > bestGuessValue {
+				bestGuess = candidateGuess
+			}
+			bestGuessMutex.Unlock()
+		}(&bestGuessMutex)
 	}
+	wg.Wait()
 	return bestGuess
 }
 
+func evaluateGuess(guess uint, candidates []uint) uint64 {
+	var remainingCandidatesAfterGuess uint64
+	var wg sync.WaitGroup
+	for i := 0; i < len(candidates); i++ {
+		possibleSolution := candidates[i]
+		wg.Add(1)
+		go func() {
+			feedbackPerDigit := getFeedbackPerDigit(getDigits(guess, 5), getDigits(possibleSolution, 5))
+			newCandidates := incorporateFeedback(feedbackPerDigit, candidates)
+			atomic.AddUint64(&remainingCandidatesAfterGuess, uint64(len(newCandidates)))
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	return remainingCandidatesAfterGuess
+}
+
+func getFeedbackPerDigit(guessDigits []uint, possibleSolutionDigits []uint) []feedback {
+	if len(guessDigits) != len(possibleSolutionDigits) {
+		panic("The length of the guess and the solution must be the same!")
+	}
+	feedbackPerDigit := make([]feedback, len(guessDigits))
+
+	// Handle all correct digits first
+	for i := 0; i < len(guessDigits); i++ {
+		if guessDigits[i] == possibleSolutionDigits[i] {
+			feedbackPerDigit[i] = feedback{feedbackType: feedbackTypeCorrect, digit: guessDigits[i]}
+		}
+	}
+
+	// Handle remaining (present and absent) digits
+	for i := 0; i < len(guessDigits); i++ {
+		// Correct digits have already been handled
+		if feedbackPerDigit[i].feedbackType == feedbackTypeCorrect {
+			continue
+		}
+
+		for j := 0; j < len(possibleSolutionDigits); j++ {
+			// Don't consider already correct digits to determine if the current digit is present or
+			// absent
+			if feedbackPerDigit[j].feedbackType == feedbackTypeCorrect {
+				continue
+			} else if possibleSolutionDigits[j] == guessDigits[i] {
+				feedbackPerDigit[i] = feedback{feedbackType: feedbackTypePresent, digit: guessDigits[i]}
+				break
+			} else if j == len(possibleSolutionDigits)-1 {
+				feedbackPerDigit[i] = feedback{feedbackType: feedbackTypeAbsent, digit: guessDigits[i]}
+			}
+		}
+	}
+
+	return feedbackPerDigit
+}
 
 func incorporateFeedback(feedbackPerDigit []feedback, candidates []uint) (newCandidates []uint) {
 	newCandidates = make([]uint, len(candidates))
@@ -140,31 +199,6 @@ func sieve(max uint) []uint {
 	}
 
 	return primes
-}
-
-func findDigitFrequencyPerPosition(numbers []uint, numberOfDigits uint) []map[uint]uint {
-	result := make([]map[uint]uint, numberOfDigits)
-
-	for i := 0; i < len(result); i++ {
-		result[i] = make(map[uint]uint)
-	}
-
-	for i := 0; i < len(numbers); i++ {
-		digits := getDigits(numbers[i], numberOfDigits)
-		for j := 0; j < len(digits); j++ {
-			result[j][digits[j]]++
-		}
-	}
-	return result
-}
-
-func evaluateGuess(guess uint, digitFrequencyPerPosition []map[uint]uint) uint {
-	var result uint = 0
-	digits := getDigits(guess, 5)
-	for i := 0; i < len(digits); i++ {
-		result += digitFrequencyPerPosition[i][digits[i]]
-	}
-	return result
 }
 
 func getDigits(num uint, numberOfDigits uint) []uint {
