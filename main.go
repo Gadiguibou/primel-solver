@@ -15,7 +15,6 @@ import (
 func main() {
 	// Calculate set of possible values
 	candidates := getPrimes(10000, 100000)
-	fmt.Println(len(candidates))
 	correctPositions := make([]uint, 0, 5)
 
 	// Calculate the frequency of each digit per position
@@ -23,11 +22,15 @@ func main() {
 
 	// Find best guess according to the frequency of each digit per position
 	bestGuess := findBestGuess(candidates, digitFrequencyPerPosition)
-	fmt.Printf("The best guess is: %05d\n", bestGuess)
+	fmt.Printf("The best first guess is: %05d. The number of remaining candidates is %v\n", bestGuess, len(candidates))
 
 	// Incorporate feedback and find next best guess
 	for {
 		feedbackPerDigit := readFeedbackForDigits(getDigits(bestGuess, 5))
+		if all(feedbackPerDigit, func(f Feedback) bool { return f.feedbackType == feedbackTypeCorrectPosition }) {
+			fmt.Printf("We found the correct number (\033[32m\033[1m%v\033[0m)! 🎉\n", bestGuess)
+			break
+		}
 		candidates, correctPositions = incorporateFeedback(feedbackPerDigit, candidates, correctPositions)
 		digitFrequencyPerPosition = findDigitFrequencyPerPosition(candidates, 5)
 		if len(candidates) == 0 {
@@ -35,7 +38,7 @@ func main() {
 			os.Exit(1)
 		}
 		bestGuess = findBestGuess(candidates, digitFrequencyPerPosition)
-		fmt.Printf("The new best guess is: %05d\n", bestGuess)
+		fmt.Printf("The new best guess is: %05d. The number of remaining candidates is %v\n", bestGuess, len(candidates))
 	}
 }
 
@@ -201,7 +204,7 @@ func readFeedbackForDigits(guessDigits []uint) []Feedback {
 				fmt.Printf("\033[1m%v\033[0m", guessDigits[j])
 			}
 		}
-		fmt.Printf(") in the \033[32mcorrect\033[0m position, \033[33mpresent\033[0m but in the \033[31mwrong\033[0m position or absent? [\033[32mc\033[0m/\033[33mp\033[0m/\033[31ma\033[0m] ")
+		fmt.Printf(") in the \033[32mcorrect\033[0m position, \033[33mpresent\033[0m but in the wrong position or \033[31mabsent\033[0m? [\033[32mc\033[0m/\033[33mp\033[0m/\033[31ma\033[0m] ")
 		for {
 			// TODO: Handle possible errors while reading
 			text, _ := reader.ReadString('\n')
@@ -240,4 +243,13 @@ func contains(slice []uint, elem uint) bool {
 		}
 	}
 	return false
+}
+
+func all(slice []Feedback, predicate func(Feedback) bool) bool {
+	for i := 0; i < len(slice); i++ {
+		if !predicate(slice[i]) {
+			return false
+		}
+	}
+	return true
 }
