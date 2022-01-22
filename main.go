@@ -15,7 +15,6 @@ import (
 func main() {
 	// Calculate set of possible values
 	candidates := getPrimes(10000, 100000)
-	correctPositions := make([]uint, 0, 5)
 
 	// Calculate the frequency of each digit per position
 	digitFrequencyPerPosition := findDigitFrequencyPerPosition(candidates, 5)
@@ -31,7 +30,7 @@ func main() {
 			fmt.Printf("We found the correct number (\033[32m\033[1m%v\033[0m)! 🎉\n", bestGuess)
 			break
 		}
-		candidates, correctPositions = incorporateFeedback(feedbackPerDigit, candidates, correctPositions)
+		candidates = incorporateFeedback(feedbackPerDigit, candidates)
 		digitFrequencyPerPosition = findDigitFrequencyPerPosition(candidates, 5)
 		if len(candidates) == 0 {
 			fmt.Fprintf(os.Stderr, "No more candidates found!")
@@ -56,18 +55,15 @@ func findBestGuess(candidates []uint, digitFrequencyPerPosition []map[uint]uint)
 	return bestGuess
 }
 
-func incorporateFeedback(feedbackPerDigit []Feedback, candidates []uint, correctPositions []uint) (newCandidates []uint, newCorrectPositions []uint) {
+func incorporateFeedback(feedbackPerDigit []Feedback, candidates []uint) (newCandidates []uint) {
 	newCandidates = make([]uint, len(candidates))
 	copy(newCandidates, candidates)
-	newCorrectPositions = make([]uint, len(correctPositions))
-	copy(newCorrectPositions, correctPositions)
+	var newCorrectPositions []uint
 
 	// Process correct feedbacks first as they affect the other feedbacks
 	for i := 0; i < len(feedbackPerDigit); i++ {
 		if feedbackPerDigit[i].feedbackType == feedbackTypeCorrectPosition {
-			if !contains(newCorrectPositions, uint(i)) {
-				newCorrectPositions = append(newCorrectPositions, uint(i))
-			}
+			newCorrectPositions = append(newCorrectPositions, uint(i))
 			newCandidates = filter(newCandidates, func(candidate uint) bool {
 				return getDigits(candidate, 5)[i] == feedbackPerDigit[i].digit
 			})
